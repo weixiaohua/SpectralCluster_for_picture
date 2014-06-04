@@ -292,7 +292,7 @@ public class SpectralCluster
 				}
 			}
 		}
-	} 
+	}
 	/**
 	 * 更新中心
 	 * 
