@@ -1,0 +1,347 @@
+package wei.hua.SpectralCluster;
+
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+
+import javax.imageio.ImageIO;
+
+import Jama.EigenvalueDecomposition;
+import Jama.Matrix;
+
+import wei.hua.kmeans.DataItem;
+
+public class SpectralCluster
+{
+	static double [][] center;
+	static int [] group ;
+	static String path = "google45.png";
+	public static void main(String[] args)
+	{
+		SpectralCluster s = new SpectralCluster();
+		double [][] simMatrix = s.simMatrix(initData(dataIn(path)));
+		double [][] D = s.getMatrixD(simMatrix);
+		double [][] L = s.getMatrixL(simMatrix, D);
+		Matrix eigenVectorNK = s.getEigenVertorNK(L);
+		s.k_means(eigenVectorNK.getArray(), 30, 50);
+		for (int i = 0; i < group.length; i++)
+		{
+			System.out.println(group[i]);
+		}
+		dataOut("Spectral_"+"test50_xy"+path);
+	}
+	public static int [][]  dataIn(String path)
+	{
+		BufferedImage bi = null;
+		try
+		{
+			bi = ImageIO.read(new File(path));
+		} catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+		int width = bi.getWidth();
+		int height = bi.getHeight();
+		int [][] data = new int[width][height];
+		for (int i = 0; i < width; i++)
+		{
+			for (int j = 0; j < height; j++)
+			{
+				data[i][j] = bi.getRGB(i, j);//rgb
+				//System.out.print(grey[i][j]);
+			}
+			//System.out.println();
+		}
+		return data;
+	}
+	public static void  dataOut(String path)
+	{
+		int k = (int) Math.sqrt(group.length);
+		int [][] rgb = new int [center.length][3];
+		for (int i = 0; i < rgb.length; i++)
+		{
+			for (int j = 0; j < rgb[0].length; j++)
+			{
+				rgb[i][j]=(int)(Math.random()*255);
+			}
+		}
+		BufferedImage nbi = new BufferedImage(k,k, BufferedImage.TYPE_INT_RGB);
+		for (int i = 0; i < k; i++)
+		{
+			for (int j = 0; j < k; j++)
+			{
+				//center[data[i][j].group]
+				Color c = new Color(rgb[group[j+k*i]][0], rgb[group[j+k*i]][1],rgb[group[j+k*i]][2]);
+				nbi.setRGB(i, j, c.getRGB());
+				//System.out.print(c.getRGB()+" ");
+			}
+			//System.out.println();
+		}
+		try
+		{
+			ImageIO.write(nbi, "jpg", new File(path));
+		} catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+	}
+	public static DataItem [][] initData(int[][] data)
+	{
+		DataItem [][] dataitems = new DataItem[data.length][data[0].length];
+		for (int i = 0; i < data.length; i++)
+		{
+			for (int j = 0; j < data[0].length; j++)
+			{
+				DataItem di = new DataItem();
+				Color c = new Color(data[i][j]);
+				int r = c.getRed();
+				int g = c.getGreen();
+				int b = c.getBlue();
+				/*di.x=i;
+				di.y=j;*/
+				di.r=r;
+				di.g=g;
+				di.b=b;
+				di.group=-1;
+				dataitems[i][j]=di;
+				//System.out.println(di.x);
+			}
+		}
+		return dataitems;
+	}
+	public double[][] simMatrix(DataItem [][] data)
+	{
+		int size = data.length*data[0].length;
+		double [][] simMatrix = new double [size][size];
+		int count=0;
+		for (int i = 0; i < data.length; i++)
+		{
+			for (int j = 0; j < data[0].length; j++)
+			{
+				for (int j2 = i; j2 < data.length; j2++)
+				{
+					for (int k = j+1; k < data[0].length; k++)
+					{
+						simMatrix[j+i*data[0].length][j2*data[0].length+k] = getDis(data[i][j], data[j2][k]);
+					}
+					
+				}
+			}
+		}
+		for (int i = 0; i < simMatrix.length; i++)
+		{
+			for (int j = 0; j < simMatrix.length; j++)
+			{
+				if(j>i){
+					simMatrix[j][i] = simMatrix[i][j];
+				}else if(j==i){
+					simMatrix[j][i] = 1;
+				}
+			}
+		}
+		for (int i = 0; i < simMatrix.length; i++)
+		{
+			for (int j = 0; j < simMatrix[0].length; j++)
+			{
+				if(simMatrix[i][j]!=0) count++;
+				//System.out.print(simMatrix[i][j]+" ");
+			}
+			//System.out.println();
+		}
+		System.out.println(simMatrix.length+" "+simMatrix[0].length+" "+count);
+		
+		return simMatrix;
+	}
+	public double[][] getMatrixD(double [][] simMatrix)
+	{
+		double [][] D = new double[simMatrix.length][simMatrix[0].length];
+		for (int i = 0; i < simMatrix[0].length; i++)
+		{
+			int sum = 0;
+			for (int j = 0; j < simMatrix.length; j++)
+			{
+				sum += simMatrix[j][i];//求列和
+			}
+			D[i][i] = sum;
+		}
+		return D;
+	}
+	public double[][] getMatrixL(double [][] simMatrix,double [][] D)
+	{
+		double [][] L = new double[simMatrix.length][simMatrix[0].length];
+		for (int i = 0; i < D.length; i++)
+		{
+			for (int j = 0; j < D[0].length; j++)
+			{
+				L[i][j] = D[i][j]-simMatrix[i][j];
+			}
+		}
+		//getEigen(L);
+		return L;
+	}
+	public Matrix getEigenVertorNK(double [][] L)
+	{
+		System.out.println("SpectralCluster.getEigen() begin");
+		Matrix matrixL = new Matrix(L);
+		EigenvalueDecomposition e = new EigenvalueDecomposition(matrixL);
+		double[] realEigenvalues = e.getRealEigenvalues();
+		//double[] imagEigenvalues = e.getImagEigenvalues();
+		System.out.println("SpectralCluster.getEigen() end");
+		/*for (int i = 0; i < realEigenvalues.length; i++)
+		{
+			System.out.println(realEigenvalues[i]+" ");
+		}*/
+		Matrix eigenVector = e.getV();
+		/*for (int i = 0; i < eigenVector.getRowDimension(); i++)
+		{
+			for (int j = 0; j < eigenVector.getColumnDimension(); j++)
+			{
+				System.out.print(eigenVector.get(i, j)+" ");
+			}
+			System.out.println();
+		}*/
+		//System.out.println(eigenVector.getRowDimension()+" "+eigenVector.getColumnDimension());
+		int index = getBigValueDistance(realEigenvalues);
+		System.out.println(index);
+		Matrix eigenVectorNK = eigenVector.getMatrix(0, eigenVector.getRowDimension()-1, 0, index);
+		return eigenVectorNK;
+	}
+	public int getBigValueDistance(double[] realEigenvalues)
+	{
+		double value = 0;
+		int index = 0;
+		for (int i = 0; i < realEigenvalues.length-1; i++)
+		{
+			if(realEigenvalues[i+1]-realEigenvalues[i]>value){
+				value = realEigenvalues[i+1]-realEigenvalues[i];
+				index = i;
+			}
+		}
+		System.out.println(index+"  "+realEigenvalues[index+1]+" "+value);
+		return index;
+	}
+	public static double getDis(DataItem k,DataItem d)
+	{
+		double distance = 0 ;
+		distance=Math.sqrt(Math.pow((k.r-d.r), 2)+Math.pow((k.g-d.g), 2)+Math.pow((k.b-d.b), 2)
+				+Math.pow((k.x-d.x), 2)+Math.pow((k.y-d.y), 2));
+		//System.out.println((int)distance);
+		return distance;
+	}
+	public void k_means(double [][] matrix,int k,int M)
+	{
+		/*double [][] center = initCenter(k, matrix);
+		int [] group = initGroup(matrix.length);*/
+		
+		center = initCenter(k, matrix);
+		group = initGroup(matrix.length);
+		
+		//calCenter(matrix, center, group);
+		int time = 1;
+		do
+		{
+			time++;
+			if(time==M) break;
+			calCenter(matrix, center, group);
+		} while (!reSetCenter(matrix, center, group));
+	}
+	/**
+	 * 初始化聚类中心
+	 * @param k 中心数
+	 * @param length 总维数
+	 * */
+	public double [][] initCenter(int k, double [][]matrix)
+	{
+		double [][] center = new double [k][matrix[0].length];
+		for (int i = 0; i < center.length; i++)
+		{
+			
+			int index = (int)(Math.random()*matrix.length);
+			for (int j = 0; j < center[0].length; j++)
+			{
+				center[i][j] = matrix[index][j];
+			}
+		}
+		return center;
+	}
+	/**
+	 * 初始化每个向量的类属
+	 * @param length 总维数
+	 * */
+	public int [] initGroup(int length)
+	{
+		int [] group = new int [length];		
+		return group;
+	}
+	/**
+	 * 计算中心
+	 * 
+	 * */
+	public void calCenter(double [][] matrix , double [][] center,int[] group)
+	{
+		for (int i = 0; i < matrix.length; i++)
+		{
+			double max = 1000000;
+			//int index;
+			for (int j = 0; j < center.length; j++)
+			{
+				if(disInMatrix(matrix, i, center[j])<max){
+					max = disInMatrix(matrix, i, center[j]);
+					group[i] = j;
+				}
+			}
+		}
+	}
+	/**
+	 * 更新中心
+	 * 
+	 * */
+	public boolean reSetCenter(double [][] matrix , double [][] center,int[] group)
+	{
+		int change = 0;
+		for (int i = 0; i < center.length; i++)
+		{
+			double [] count = new double[matrix[0].length];
+			int time = 0;
+			for (int j = 0; j < group.length; j++)
+			{
+				if(group[j]==i){
+					time++;
+					for (int k = 0; k < matrix[0].length; k++)
+					{
+						count[k] += matrix[j][k];
+					}
+				}
+			}
+			int t = 0;
+			for (int j = 0; j < count.length; j++)
+			{
+				if(center[i][j]==count[j]/time){
+					t++;
+				}
+				center[i][j] = count[j]/time;
+			}
+			if(t==count.length){
+				change ++;
+			}
+		}
+		if(change==center.length){
+			return true;
+		}
+		else return false;
+	}
+	/**
+	 * 计算矩阵中行向量之间的距离
+	 * */
+	public double disInMatrix(double [][] matrix ,int i,double [] center)
+	{
+		double dis  = 0;
+		for (int k = 0; k < matrix[0].length; k++)
+		{
+			dis += Math.pow(matrix[i][k] - center[k], 2);
+		}
+		dis = Math.sqrt(dis);
+		return dis;
+	}
+}
